@@ -1,0 +1,1 @@
+from .yolo_trt import YOLOPoseTRT
