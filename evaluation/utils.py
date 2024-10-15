@@ -36,8 +36,10 @@ def collectPredictions(images_dir: str, model_engine: str, out_array='prediction
 
 def computeR(gt: str, preds: str, out=None) -> np.ndarray:
     gt = np.load(gt)
+    gt = gt.reshape(-1, gt.shape[1] * gt.shape[2])
     preds = np.load(preds)
-    error = np.sqrt(((preds - gt) ** 2).sum(axis=2))
+    preds = preds.reshape(-1, preds.shape[1] * preds.shape[2])
+    error = preds - gt
     R = np.diag(error.var(axis=0))
     if type(out) == str:
         np.save(out, R)

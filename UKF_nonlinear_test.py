@@ -4,7 +4,7 @@ import cv2
 import time
 from kalmantorch import UnscentedKalmanFilter
 import torch
-from dynamic_models import CTRVcomputeQ, CTRVmeasurementFunctionXY, CTRVmeasurementFunctionXYV, CTRVstateTransitionFunction
+from dynamic_models import CTRVcomputeQ, CTRVmeasurementFunctionXY, CTRVstateTransitionFunction
 
 
 dt = 1 / 13.2
