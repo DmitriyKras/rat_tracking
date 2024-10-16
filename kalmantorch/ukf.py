@@ -18,7 +18,7 @@ class UnscentedKalmanFilter:
         self.R = torch.eye(dim_z)
         self._dim_x = dim_x
         self._dim_z = dim_z
-        self.points_fn = MerweScaledSigmaPoints(dim_x, 0.5, 2, -2)
+        self.points_fn = MerweScaledSigmaPoints(dim_x, 0.4, 2, dim_x - 3)
         self._dt = dt
         self._num_sigmas = self.points_fn.num_sigmas()
         self.hx = hx
@@ -135,7 +135,7 @@ class UnscentedKalmanFilter:
 
         # compute cross variance of the state and the measurements
         Pxz = self.cross_variance(self.x, zp, self.sigmas_f, self.sigmas_h)
-
+        
         self.K = torch.mm(Pxz, self.SI)        # Kalman gain
         self.y = self.residual_z(z.float(), zp)   # residual
         # print('K: ', self.K.dtype)
