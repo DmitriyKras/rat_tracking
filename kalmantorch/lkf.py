@@ -8,7 +8,7 @@ class LinearKalmanFilter:
         self.H = H.float()
         self.Q = Q.float()
         self.R = R.float()
-        self.P = torch.eye(A.size()[0]) * 10
+        self.P = torch.eye(A.size()[0]) * 100
         self.x = x[:, None].float()
         self.A_t = A.T.float()
         self.H_t = H.T.float()

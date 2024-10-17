@@ -17,14 +17,14 @@ n_kpts = 13
 A, H, Q, _ = constantAccelerationModel(n_kpts, dt, 'xy')
 
 x0 = predictions[0].flatten()
-kalman = LinearKalmanFilter(A, H, Q * 32000 , R, torch.from_numpy(np.concatenate((x0, np.zeros_like(x0), np.zeros_like(x0)))))
+kalman = LinearKalmanFilter(A, H, Q , R, torch.from_numpy(np.concatenate((x0, np.zeros_like(x0), np.zeros_like(x0)))))
 
 
 filtered = [x0, ]
 for z in tqdm(predictions[1:], total=predictions.shape[0]):
     z = z.flatten()
     kalman.predict()
-    x = kalman.update(torch.from_numpy(z)).numpy()[: 2*n_kpts]
+    x = kalman.update(torch.from_numpy(z)).numpy()[:n_kpts * 2]
     filtered.append(x)
 
 filtered = np.array(filtered)
@@ -45,3 +45,7 @@ print('Predicted RMSE:', pred_rmse)
 
 filtered_rmse = np.sqrt(((x_nose_f - x_nose) ** 2).sum())
 print('Predicted RMSE:', filtered_rmse)
+
+plt.plot(filtered[:, 0], filtered[:, 1], 'r-', linewidth=2)
+plt.plot(kpts[:, 0], kpts[:, 1], 'b-', linewidth=1)
+plt.show()

@@ -1,6 +1,7 @@
 import torch
 torch.pi = torch.acos(torch.zeros(1)).item() * 2
 
+
 ### CTRV MODEL ###
 
 def CTRVstateTransitionFunction(x, dt):
@@ -53,16 +54,16 @@ def stateMeanCTRV(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 def stateSubtractCTRV(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     dif = x.reshape(-1, 5) - y.reshape(-1, 5)
-    w = dif[:, 3] % (2 * torch.pi)
-    w = torch.where(w > torch.pi, w - 2 * torch.pi, w)
-    dif[:, 3] = w
+    #w = dif[:, 3] % (2 * torch.pi)
+    #w = torch.where(w > torch.pi, w - 2 * torch.pi, w)
+    dif[:, 3] = (dif[:, 3] + torch.pi) % (torch.pi * 2) - torch.pi
     return dif.flatten()
 
 
 def stateAddCTRV(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     dif = x.reshape(-1, 5) + y.reshape(-1, 5)
     w = dif[:, 3] % (2 * torch.pi)
-    w = torch.where(w > torch.pi, w - 2 * torch.pi, w)
+    #w = torch.where(w > torch.pi, w - 2 * torch.pi, w)
     dif[:, 3] = w
     return dif.flatten()
 

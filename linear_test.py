@@ -7,14 +7,16 @@ from kalmantorch import LinearKalmanFilter
 from dynamic_models import *
 
 
-dt = 1 / 20
-n_kpts = 17
+dt = 1 / 5
+n_kpts = 13
 
-A, H, Q, R = constantAccelerationModel(n_kpts, dt, 'xyVxVy')
+A, H, Q, R = constantAccelerationModel(n_kpts, dt, 'xy')
 
-yolo = YOLOPoseTRT('yolo/yolov8n-pose.engine', (640, 384))
+R = torch.from_numpy(np.load('R.npy')).float()
 
-cap = cv2.VideoCapture(0)
+yolo = YOLOPoseTRT('yolo/yolov8m-rat.engine', (640, 384), n_kpts=13)
+
+cap = cv2.VideoCapture('rec_2024_07_09_13_42_01_down_sample.mp4')
 fourcc = cv2.VideoWriter_fourcc(*'MJPG')
 #recorder = cv2.VideoWriter('out.mp4', fourcc, 5, (640, 480))
 
@@ -27,11 +29,13 @@ lk_params = dict( winSize = (15, 15),
 
 old_gray = None
 
+j = 0
+
 while cap.isOpened():
     ret, frame = cap.read()
 
 
-    if not ret or cv2.waitKey(1) == ord('q'):
+    if not ret or cv2.waitKey(0) == ord('q'):
         break
 
     tic = time.time()
@@ -54,17 +58,23 @@ while cap.isOpened():
 
             vel = (p1 - old_z) / dt
             kalman.predict()
-            x = kalman.update(torch.from_numpy(np.concatenate((z, vel.flatten())))).numpy()
+            print(kalman.x[:2], kalman.x[2 * n_kpts : 2 * n_kpts + 2], kalman.x[4 * n_kpts : 4 * n_kpts + 2])
+            j += 1
+            #x = kalman.update(torch.from_numpy(np.concatenate((z, vel.flatten())))).numpy()
+            if j == 4:
+                x = kalman.update(torch.from_numpy(z)).numpy()
+                j = 0
+            else:
+                x = kalman.x.numpy()
             x = np.clip(x[: 34], 0, frame.shape[1])
-            for i in range(17):
+            for i in range(n_kpts):
                 frame = cv2.circle(frame, (int(z[2*i]), int(z[2*i + 1])), 2, (255, 0, 0), -1)
                 frame = cv2.circle(frame, (int(x[2*i]), int(x[2*i + 1])), 2, (0, 0, 255), -1)
             old_frame = cur_frame
             old_z = z.reshape(-1, 1, 2).astype(np.float32)
             
-        
     toc = time.time()
-    time.sleep(max(0, dt - (toc - tic)))
+    #time.sleep(max(0, dt - (toc - tic)))
     print('FPS:', 1 / (toc - tic))
     cv2.imshow('FRAME', frame)
     #recorder.write(frame)

@@ -18,7 +18,7 @@ class UnscentedKalmanFilter:
         self.R = torch.eye(dim_z)
         self._dim_x = dim_x
         self._dim_z = dim_z
-        self.points_fn = MerweScaledSigmaPoints(dim_x, 0.4, 2, dim_x - 3)
+        self.points_fn = MerweScaledSigmaPoints(dim_x, 0.5, 2, dim_x - 3)
         self._dt = dt
         self._num_sigmas = self.points_fn.num_sigmas()
         self.hx = hx
