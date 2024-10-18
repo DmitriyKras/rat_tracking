@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from scipy.linalg import cholesky
+from fannypack.utils import cholupdate
 
 
 def isPD(B):
@@ -74,7 +75,7 @@ class MerweScaledSigmaPoints:
     def num_sigmas(self):
         return 2 * self.n + 1
     
-    def sigma_points(self, x: torch.Tensor, P):
+    def sigma_points(self, x: torch.Tensor, P: torch.Tensor):
         if self.n != x.size()[0]:
             raise ValueError("expected size(x) {}, but size is {}".format(
                 self.n, x.size()))
@@ -83,12 +84,24 @@ class MerweScaledSigmaPoints:
 
         lambda_ = self.alpha**2 * (n + self.kappa) - n
         #print(P.max(), P.min())
-        #P = nearSPD(P)
         #P = P.numpy()
         #P = nearestPD(P)
         #U = torch.from_numpy(cholesky(nearestPD((lambda_ + n) * P))).float()
         U = torch.linalg.cholesky((lambda_ + n) * P).mH
 
+        sigmas = torch.zeros((2*n+1, n)).to(x.device)
+        sigmas[0] = x
+
+        for k in range(n):
+            sigmas[k+1]   = self.subtract(x, -U[k])
+            sigmas[n+k+1] = self.subtract(x, U[k])
+
+        return sigmas
+    
+    def sigma_points_square_root(self, x: torch.Tensor, S: torch.Tensor):
+        n = self.n
+        lambda_ = self.alpha**2 * (n + self.kappa) - n
+        U = np.sqrt(n + lambda_) * S
         sigmas = torch.zeros((2*n+1, n)).to(x.device)
         sigmas[0] = x
 
@@ -113,7 +126,7 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov=None,
                         mean_fn=None, residual_fn=None):
     
     kmax, n = sigmas.size()
-
+    
     if mean_fn is None:
         x = torch.mm(Wm[None, :], sigmas).squeeze()
     else:
@@ -130,5 +143,40 @@ def unscented_transform(sigmas, Wm, Wc, noise_cov=None,
 
     if noise_cov is not None:
         P += noise_cov
+
+    return x, P
+
+
+def unscented_transform_square_root(sigmas: torch.Tensor, Wm: torch.Tensor, 
+                                    Wc: torch.Tensor, noise_cov: torch.Tensor,
+                                    mean_fn=None, residual_fn=None):
+    kmax, n = sigmas.size()
+    if mean_fn is None:
+        x = torch.sum(Wm[:, None] * sigmas.float(), dim=0)
+    else:
+        x = mean_fn(sigmas, Wm)
+
+    if residual_fn is None:
+        y = sigmas - x[None, :]
+    else:
+        y = residual_fn(sigmas, x[None, :])
+    
+    concatenated = torch.cat(
+            [
+                y[1:, :] * torch.sqrt(Wc[1]),
+                noise_cov.transpose(-1, -2),
+            ],
+            dim=0,
+        )
+    
+    _, R = torch.linalg.qr(concatenated, mode="complete")
+
+    L = R[: n, :].transpose(-1, -2)
+
+    P = cholupdate(
+            L=L,
+            x=y[0, :],
+            weight=Wc[0],
+        )
 
     return x, P

@@ -1,9 +1,10 @@
 import torch
-from kalmantorch import unscented_transform, MerweScaledSigmaPoints
+from kalmantorch import unscented_transform_square_root, MerweScaledSigmaPoints
 from copy import deepcopy
+from fannypack.utils import cholupdate
 
 
-class UnscentedKalmanFilter:
+class SquareRootUnscentedKalmanFilter:
     def __init__(self, dim_x, dim_z, dt, hx, fx,
                  x_mean_fn=None, z_mean_fn=None,
                  residual_x=None,
@@ -84,7 +85,7 @@ class UnscentedKalmanFilter:
             fx = self.fx
 
         # calculate sigma points for given mean and covariance
-        sigmas = self.points_fn.sigma_points(self.x, self.P)
+        sigmas = self.points_fn.sigma_points_square_root(self.x, self.P)
 
         self.sigmas_f = fx(sigmas.reshape(-1, self._dim_x), dt).reshape(sigmas.shape)
 
@@ -103,9 +104,9 @@ class UnscentedKalmanFilter:
 
 
         self.compute_process_sigmas(dt, fx, **fx_args)
-        self.x, self.P = unscented_transform(self.sigmas_f, self.Wm, self.Wc, self.Q,
+        self.x, self.P = unscented_transform_square_root(self.sigmas_f, self.Wm, self.Wc, self.Q,
                             self.x_mean, self.residual_x)
-        self.sigmas_f = self.points_fn.sigma_points(self.x, self.P)
+        self.sigmas_f = self.points_fn.sigma_points_square_root(self.x, self.P)
 
         self.x_prior = torch.clone(self.x)
         self.P_prior = torch.clone(self.P)
@@ -129,14 +130,22 @@ class UnscentedKalmanFilter:
         n_sigmas, dim_x = self.sigmas_f.shape
         self.sigmas_h = hx(self.sigmas_f.reshape(-1, self._dim_x)).reshape(n_sigmas, self._dim_z)
         # mean and covariance of prediction passed through unscented transform
-        zp, self.S = unscented_transform(self.sigmas_h, self.Wm, self.Wc, R, self.z_mean, self.residual_z)
-        self.SI = torch.pinverse(self.S) + torch.ones_like(self.S) * 1e-6
-
+        zp, self.S = unscented_transform_square_root(self.sigmas_h, self.Wm, self.Wc, R, self.z_mean, self.residual_z)
 
         # compute cross variance of the state and the measurements
-        Pxz = self.cross_variance(self.x, zp, self.sigmas_f, self.sigmas_h)
+        #Pxz = self.cross_variance(self.x, zp, self.sigmas_f, self.sigmas_h)
+
+        X_k_pred_centered = self.sigmas_f - self.x[None, :]
+        Y_k_pred_centered = self.sigmas_h - zp[None, :]
+
+        Pxz = torch.sum(
+            self.Wc[:, None, None]
+            * (X_k_pred_centered[:, :, None] @ Y_k_pred_centered[:, None, :]),
+            dim=0,
+        )
+
+        self.K = torch.linalg.solve(self.S.transpose(-1, -2), torch.linalg.solve(self.S, Pxz.transpose(-1, -2))).transpose(-1, -2)
         
-        self.K = torch.mm(Pxz, self.SI)        # Kalman gain
         self.y = self.residual_z(z.float(), zp)   # residual
         # print('K: ', self.K.dtype)
         # print('y: ', self.y.dtype)
@@ -144,8 +153,11 @@ class UnscentedKalmanFilter:
         #print(self.K)
         #print(torch.mm(self.K, self.y[:, None]))
         self.x = self.state_add(self.x, torch.mm(self.K, self.y[:, None]).squeeze())
-        self.P = self.P - torch.mm(self.K, torch.mm(self.S, self.K.T))
-
+        U = self.K @ self.S
+        P = self.P
+        for i in range(U.shape[1]):
+            P = cholupdate(P, U[:, i], weight=torch.tensor(-1))
+        self.P = P
         # save measurement and posterior state
         self.z = deepcopy(z)
         self.x_post = torch.clone(self.x)

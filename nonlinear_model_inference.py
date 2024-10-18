@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from dynamic_models import CTRVcomputeQ, CTRVmeasurementFunctionXY, CTRVstateTransitionFunction, stateAddCTRV, stateSubtractCTRV
+from dynamic_models import CTRVcomputeQ, CTRVmeasurementFunctionXY, CTRVstateTransitionFunction, stateAddCTRV, stateSubtractCTRV, stateMeanCTRV, CTRVstateTransitionFunctionV2
 from kalmantorch import UnscentedKalmanFilter
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -17,17 +17,16 @@ n_kpts = 13
 
 x0 = predictions[0].flatten()
 
-Q = torch.eye(n_kpts*5) * 10
+Q = torch.eye(n_kpts*5) * 40
 
 ### CTRV  MODEL ###
 
-kalman = UnscentedKalmanFilter(dim_x=n_kpts*5, dim_z=n_kpts*2, dt=dt, hx=CTRVmeasurementFunctionXY, fx=CTRVstateTransitionFunction,
-                               residual_x=stateSubtractCTRV, state_add=stateAddCTRV)
+kalman = UnscentedKalmanFilter(dim_x=n_kpts*5, dim_z=n_kpts*2, dt=dt, hx=CTRVmeasurementFunctionXY, fx=CTRVstateTransitionFunctionV2)
 
 kalman.Q = Q
 kalman.R = R
 kalman.P = torch.eye(n_kpts*5) * 50
-kalman.x = torch.from_numpy(np.concatenate((x0.reshape(-1, 2), np.ones((n_kpts, 3))), axis=1).flatten()).float()
+kalman.x = torch.from_numpy(np.concatenate((x0.reshape(-1, 2), np.zeros((n_kpts, 3))), axis=1).flatten()).float()
 
 
 def kpts_vel_to_measurement(z):
@@ -62,7 +61,7 @@ for j, z in tqdm(enumerate(predictions[1:]), total=predictions.shape[0]):
     z = z.flatten()
     kalman.predict()
     i += 1
-    #kalman.Q = CTRVcomputeQ(kalman.x, dt, 20, 10)
+    kalman.Q = CTRVcomputeQ(kalman.x, dt, 40, 1)
     if i == n:
         x = kalman.update(kpts_vel_to_measurement(z)).numpy()
         i = 0
